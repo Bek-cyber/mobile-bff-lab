@@ -1,0 +1,41 @@
+# === Gradle ===
+.gradle/
+build/
+
+# Wrapper должен быть в репозитории
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# === IntelliJ IDEA ===
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# === Eclipse / STS ===
+.project
+.classpath
+.settings/
+.springBeans
+.sts4-cache/
+.factorypath
+.apt_generated
+bin/
+
+# === NetBeans ===
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# === VS Code ===
+.vscode/
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Logs ===
+*.log
