@@ -7,6 +7,9 @@ import com.project.mobilebfflab.client.dto.AccountClientDto;
 import com.project.mobilebfflab.client.dto.OfferClientDto;
 import com.project.mobilebfflab.client.dto.UserClientDto;
 import com.project.mobilebfflab.dto.HomeResponseDto;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.reactor.circuitbreaker.operator.CircuitBreakerOperator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,21 +31,34 @@ public class HomeService {
     private final OfferClient offerClient;
     private final AccountClient accountClient;
 
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
+
     public HomeResponseDto getHome() {
         log.info("Параллельный fan-out для Home-экрана");
 
+        CircuitBreaker userCb = circuitBreakerRegistry.circuitBreaker("userService");
+        CircuitBreaker accountsCb = circuitBreakerRegistry.circuitBreaker("accountsService");
+        CircuitBreaker offersCb = circuitBreakerRegistry.circuitBreaker("offersService");
+
         Mono<UserClientDto> userMono = Mono
                 .fromCallable(userClient::getUser)
-                .timeout(USER_TIMEOUT);
+                .timeout(USER_TIMEOUT)
+                .transformDeferred(CircuitBreakerOperator.of(userCb));
 
         Mono<List<AccountClientDto>> accountsMono = Mono
                 .fromCallable(accountClient::getAccounts)
-                .timeout(ACCOUNTS_TIMEOUT);
+                .timeout(ACCOUNTS_TIMEOUT)
+                .transformDeferred(CircuitBreakerOperator.of(accountsCb));
 
         Mono<List<OfferClientDto>> offersMono = Mono
                 .fromCallable(offerClient::getOffers)
                 .timeout(OFFERS_TIMEOUT)
-                .onErrorReturn(Collections.emptyList());
+                .transformDeferred(CircuitBreakerOperator.of(offersCb))
+                .onErrorResume(ex -> {
+                    // graceful degradation: офферы — необязательный блок
+                    log.warn("Offers-service недоступен (CB/timeout/ошибка), деградация Home-экрана: {}", ex.toString());
+                    return Mono.just(Collections.emptyList());
+                });
 
         return Mono.zip(userMono, accountsMono, offersMono).map(tuple -> {
             UserClientDto user = tuple.getT1();
